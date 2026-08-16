@@ -1,0 +1,84 @@
+services:
+  # Security: Restricts Docker API access to only what the proxy needs
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1  # Allow GET /containers/{id}/json
+      - POST=1        # Allow POST /containers/{id}/start
+    restart: unless-stopped
+
+  proxy:
+    build:
+      context: .
+      dockerfile: docker/proxy/Dockerfile
+    container_name: llmlingua-proxy
+    ports:
+      - "${PROXY_PORT:-8081}:8081"
+    volumes:
+      - ./docker/proxy/app.yml:/app/app.yml
+    environment:
+      - DOCKER_HOST=http://docker-socket-proxy:2375
+      # Passed through for external-model fallback auth (referenced by app.yml apiKeyEnv)
+      - VENICE_API_KEY=${VENICE_API_KEY:-}
+    depends_on:
+      - docker-socket-proxy
+    restart: unless-stopped
+
+  llmlingua:
+    build:
+      context: ./docker/llmlingua
+      dockerfile: Dockerfile
+    container_name: llmlingua-compression
+    ports:
+      - "8084:8000"
+    # ROCm/HIP GPU access — shares the GPU with llama-agents (gfx1201 / RDNA4)
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+    security_opt:
+      - seccomp=unconfined
+    ipc: host
+    restart: unless-stopped
+
+  # GPU containers — maintained in a SEPARATE project; started/stopped by the
+  # proxy wakelock via the Docker API. Shown here for reference only.
+  # They run on AMD ROCm/HIP (gfx1201 / RDNA4), NOT nvidia:
+  #
+  # llama-vision:
+  #   build:
+  #     context: ./docker/llama-vision
+  #     dockerfile: Dockerfile
+  #   container_name: llama-vision
+  #   ports:
+  #     - "8082:8080"
+  #   devices:
+  #     - /dev/kfd
+  #     - /dev/dri
+  #   group_add:
+  #     - video
+  #   security_opt:
+  #     - seccomp=unconfined
+  #   ipc: host
+  #   restart: unless-stopped
+  #
+  # llama-agents:
+  #   build:
+  #     context: ./docker/llama-agents
+  #     dockerfile: Dockerfile
+  #   container_name: llama-agents
+  #   ports:
+  #     - "8083:8080"
+  #   devices:
+  #     - /dev/kfd
+  #     - /dev/dri
+  #   group_add:
+  #     - video
+  #   security_opt:
+  #     - seccomp=unconfined
+  #   ipc: host
+  #   restart: unless-stopped

@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+requests
+tiktoken
+llmlingua
+pyyaml

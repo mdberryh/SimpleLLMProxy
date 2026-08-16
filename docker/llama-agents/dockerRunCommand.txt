@@ -1,0 +1,25 @@
+
+ docker stop llama-agents && docker rm llama-agents
+docker run -d --restart unless-stopped \
+  --name llama-agents \
+  --device=/dev/kfd \
+  --device=/dev/dri \
+  --security-opt seccomp=unconfined \
+  --group-add video \
+  --ipc=host \
+  -e HIP_VISIBLE_DEVICES=0 \
+  -p 8083:8080 \
+  -v /mnt/data/models:/models \
+  llama-rocm \
+  --model /models/Qwen3.8_27B/Qwen3.8-27B-UD-Q4_K_XL.gguf \
+  --mmproj /models/Qwen3.8_27B/mmproj-F16.gguf \
+  --host 0.0.0.0 \
+  --port 8080 \
+  --n-gpu-layers 99 \
+  --flash-attn on \
+  --spec-type draft-mtp \
+  --spec-draft-n-max 2 \
+  --batch-size 2048 \
+  --ubatch-size 512 \
+  --ctx-size 94000 \
+  --parallel 1

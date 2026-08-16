@@ -1,0 +1,40 @@
+# LLMLingua-2 Compression Server Configuration
+# This config is used by the llmlingua container to host the compression service
+
+# Server settings
+host: "0.0.0.0"
+port: 8000
+
+# LLMLingua-2 model settings
+modelName: "microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank"
+
+# Device for model inference
+# Options: "auto" (detects CUDA/ROCm), "cuda", "cpu"
+device: "cpu"
+
+# Default compression rate (0.1 to 1.0)
+# Lower values = more aggressive compression
+# Can be overridden per-request via the compression_rate parameter
+compressionRate: 0.6
+
+# Tokenizer settings
+tokenizerEncoding: "o200k_base"  # tiktoken encoding (GPT-4o, approximates Qwen3)
+
+# Force tokens to preserve during compression
+# These tokens will not be removed during compression
+forceTokens:
+  - "\n"
+  - "."
+  - "?"
+  - "!"
+  - ":"
+  - ";"
+
+# Logging
+logLevel: "INFO"  # DEBUG, INFO, WARNING, ERROR
+
+# Health check settings
+healthCheckInterval: 30  # seconds
+healthCheckTimeout: 5    # seconds
+healthCheckStartPeriod: 120  # seconds (model loading time)
+healthCheckRetries: 3

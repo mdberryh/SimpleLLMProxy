@@ -1,0 +1,86 @@
+# LLMLingua Proxy Configuration
+# 4-Container Architecture: Proxy → LLMLingua → GPU Containers
+
+# Proxy listen port
+proxyPort: 8081
+
+bypassNonStreamingChatCompletions: false
+
+# LLMLingua compression container (separate, OpenAI-compatible API)
+llmlinguaUrl: http://<ipaddr>:8087  # Docker service name; or http://<ipaddr>:8084 for direct host access
+
+# [AUTOWAKE-TEMP] GPU Auto-Wake Feature (temporary - remove when GPU drivers
+# can spin idle GPUs down on their own). See the REMOVAL GUIDE at the top of
+# src/gpu_managers/wakelock.py. The keys below tagged [AUTOWAKE-TEMP] exist only
+# for this feature; localModels/externalModels are NOT part of it.
+autoWakeEnabled: true  # Set to true to enable GPU auto-start/stop
+dockerNames:            # [AUTOWAKE-TEMP]
+  - llama-vision
+  - llama-agents
+
+# GPU containers
+localModels:
+  - name: gpu1-vision
+    url: http://<ipaddr>:8084  # configurable
+    dockerName: llama-vision
+    priority: 1  # Lower = preferred first
+    capabilities:
+      - vision
+      - text
+
+  - name: gpu2-agents
+    url: http://<ipaddr>:8083  # configurable
+    dockerName: llama-agents
+    priority: 2
+    capabilities:
+      - vision
+      - text
+
+# Set to false to disable cloud fallback entirely — cold-start/overflow requests
+# will queue and wait for a local GPU instead of ever routing to Venice.
+externalFallbackEnabled: false
+externalModels:
+  - name: venice-qwen
+    url: https://api.venice.ai/v1
+    apiKeyEnv: VENICE_API_KEY
+
+# [AUTOWAKE-TEMP] Warmup (model reloads into VRAM on docker start, typically 60-120s)
+warmupSeconds: 120  # was 45, increased for model reload
+idleTimeoutMinutes: 10  # [AUTOWAKE-TEMP]
+
+# [AUTOWAKE-TEMP] How long to poll for a locally-ready GPU before falling back to
+# Venice on cold start. Health probing runs every 2s, so 15s = ~7 probe cycles
+# with minimal timeout cost. Set to 0 to always route to Venice immediately.
+coldStartWaitSeconds: 15
+
+# [AUTOWAKE-TEMP] Startup grouping: all containers start together on first request
+# and shut down together after idle timeout
+# Note: llmlingua is NOT in startupGroup — it stays always-on via docker-compose restart policy
+startupGroup:
+  - llama-vision    # GPU 1 — primary
+  - llama-agents    # GPU 2 — secondary (turns on with GPU 1)
+
+# Models that trigger LLMLingua compression (wildcard patterns supported)
+# Models NOT in this list bypass compression entirely
+compressionModels:
+  - "qwen3.8-llmlingua"
+  - "qwen3.8-agents-llmlingua"
+  - "*-llmlingua"  # wildcard: any model ending in -llmlingua
+
+# Target compression ratio
+compressionRate: 0.6
+
+# Circuit Breaker
+circuitBreakerFailures: 2
+circuitBreakerCooldownMinutes: 10
+
+# Model name rewrite map: OpenClaw internal IDs -> upstream model names
+# If a model isn't in this map, it defaults to _defaultFallback
+_defaultFallback: "Qwen3.8-27B-UD-Q4_K_XL.gguf"
+modelMap:
+  "Qwen3.8-27B-UD-Q4_K_XL.gguf": "Qwen3.8-27B-UD-Q4_K_XL.gguf"
+  "qwen3-8-27b-ud-q4-k-xl-gguf/llamacpp-chat/Qwen3.6-27B-UD-Q4_K_XL.gguf": "Qwen3.8-27B-UD-Q4_K_XL.gguf"
+  "qwen3-8-27b-agents/llamacpp-chat/Qwen3.6-27B-UD-Q4_K_XL.gguf": "Qwen3.8-27B-UD-Q4_K_XL.gguf"
+  "qwen3.8-llmlingua": "Qwen3.8-27B-UD-Q4_K_XL.gguf"
+  "qwen3.8-agents-llmlingua": "Qwen3.8-27B-UD-Q4_K_XL.gguf"
+  "_external_fallback": "qwen3.6-27b"  # Venice.AI model slug used on cloud offload
